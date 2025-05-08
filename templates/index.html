@@ -6,26 +6,23 @@
     <title>Simple Grammar & Spell Checker</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Custom styles if needed */
         body {
-            font-family: 'Inter', sans-serif; /* Using Inter font */
+            font-family: 'Inter', sans-serif;
         }
-        /* Style for highlighting errors in context */
         .error-context-highlight {
-            background-color: rgba(255, 255, 0, 0.3); /* Light yellow highlight */
+            background-color: rgba(255, 255, 0, 0.3);
             font-weight: bold;
             padding: 0 2px;
             border-radius: 3px;
         }
-        /* Add some spacing for list items */
         #resultsList li {
-            margin-bottom: 0.75rem; /* Equivalent to mb-3 */
-            padding-bottom: 0.75rem; /* Equivalent to pb-3 */
-            border-bottom: 1px solid #e5e7eb; /* Equivalent to border-b border-gray-200 */
+            margin-bottom: 0.75rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid #e5e7eb;
         }
-         #resultsList li:last-child {
+        #resultsList li:last-child {
             border-bottom: none;
-         }
+        }
     </style>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -51,8 +48,7 @@
         <div id="resultsArea" class="mt-6">
             <h2 class="text-xl font-semibold mb-3 text-gray-700">Results:</h2>
             <div id="resultsMessage" class="text-gray-600 mb-4">No issues found yet.</div>
-            <ul id="resultsList" class="list-none p-0">
-                </ul>
+            <ul id="resultsList" class="list-none p-0"></ul>
         </div>
     </div>
 
@@ -63,19 +59,36 @@
         const resultsList = document.getElementById('resultsList');
         const loadingIndicator = document.getElementById('loadingIndicator');
 
-        checkButton.addEventListener('click', async () => {
+        // Debounced real-time checking after pressing SPACE
+        let typingTimer;
+        const debounceDelay = 800; // milliseconds
+        const SPACE_KEY_CODE = 32;
+
+        textInput.addEventListener('keyup', (e) => {
+            clearTimeout(typingTimer);
+            if (e.keyCode === SPACE_KEY_CODE) {
+                typingTimer = setTimeout(() => {
+                    checkTextRealTime();
+                }, debounceDelay);
+            }
+        });
+
+        checkButton.addEventListener('click', () => {
+            checkTextRealTime();
+        });
+
+        async function checkTextRealTime() {
             const text = textInput.value.trim();
             if (!text) {
                 resultsMessage.textContent = 'Please enter some text to check.';
-                resultsList.innerHTML = ''; // Clear previous results
+                resultsList.innerHTML = '';
                 return;
             }
 
-            // Disable button and show loading indicator
             checkButton.disabled = true;
             loadingIndicator.classList.remove('hidden');
-            resultsMessage.textContent = ''; // Clear previous messages
-            resultsList.innerHTML = ''; // Clear previous results
+            resultsMessage.textContent = '';
+            resultsList.innerHTML = '';
 
             try {
                 const response = await fetch('/check', {
@@ -83,16 +96,15 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ text: text }),
+                    body: JSON.stringify({ text }),
                 });
 
                 if (!response.ok) {
-                    // Try to get error message from backend response
                     let errorMsg = `Error: ${response.status} ${response.statusText}`;
                     try {
                         const errorData = await response.json();
                         errorMsg = errorData.error || errorMsg;
-                    } catch (e) { /* Ignore if response is not JSON */ }
+                    } catch (_) {}
                     throw new Error(errorMsg);
                 }
 
@@ -100,7 +112,7 @@
 
                 if (result.errors && result.errors.length > 0) {
                     resultsMessage.textContent = `Found ${result.errors.length} potential issue(s):`;
-                    displayErrors(result.errors, text); // Pass original text for context highlighting
+                    displayErrors(result.errors, text);
                 } else {
                     resultsMessage.textContent = 'No issues found!';
                 }
@@ -108,30 +120,27 @@
             } catch (error) {
                 console.error('Checking failed:', error);
                 resultsMessage.textContent = `Failed to check text. ${error.message || 'Please try again.'}`;
-                resultsList.innerHTML = ''; // Clear list on error
+                resultsList.innerHTML = '';
             } finally {
-                // Re-enable button and hide loading indicator
                 checkButton.disabled = false;
                 loadingIndicator.classList.add('hidden');
             }
-        });
+        }
 
         function displayErrors(errors, originalText) {
-            resultsList.innerHTML = ''; // Clear previous errors
+            resultsList.innerHTML = '';
             errors.forEach(error => {
                 const listItem = document.createElement('li');
-                listItem.className = 'border-b border-gray-200 pb-3 mb-3 last:border-b-0 last:mb-0'; // Tailwind classes for styling
+                listItem.className = 'border-b border-gray-200 pb-3 mb-3 last:border-b-0 last:mb-0';
 
-                // Create highlighted context string
                 const contextText = error.context;
-                const errorStart = error.offset - error.contextOffset; // Start of error within context
+                const errorStart = error.offset - error.contextOffset;
                 const errorEnd = errorStart + error.length;
                 const highlightedContext = contextText.substring(0, errorStart) +
-                                          '<span class="error-context-highlight">' +
-                                          contextText.substring(errorStart, errorEnd) +
-                                          '</span>' +
-                                          contextText.substring(errorEnd);
-
+                    '<span class="error-context-highlight">' +
+                    contextText.substring(errorStart, errorEnd) +
+                    '</span>' +
+                    contextText.substring(errorEnd);
 
                 let suggestionsHTML = '';
                 if (error.suggestions && error.suggestions.length > 0) {
@@ -147,6 +156,5 @@
             });
         }
     </script>
-
 </body>
 </html>

@@ -128,33 +128,49 @@
         }
 
         function displayErrors(errors, originalText) {
-            resultsList.innerHTML = '';
-            errors.forEach(error => {
+                resultsList.innerHTML = '';
+                errors.forEach(error => {
                 const listItem = document.createElement('li');
                 listItem.className = 'border-b border-gray-200 pb-3 mb-3 last:border-b-0 last:mb-0';
 
                 const contextText = error.context;
-                const errorStart = error.offset - error.contextOffset;
-                const errorEnd = errorStart + error.length;
-                const highlightedContext = contextText.substring(0, errorStart) +
-                    '<span class="error-context-highlight">' +
-                    contextText.substring(errorStart, errorEnd) +
-                    '</span>' +
-                    contextText.substring(errorEnd);
+                let displayContextHTML = `"...${contextText}..."`; // Default
+
+                // Attempt highlighting only if we have the necessary info
+                // Assuming Python will provide 'offsetInContext' in the future
+                if (typeof error.offsetInContext === 'number' && typeof error.length === 'number') {
+                    const errorStart = error.offsetInContext;
+                    const errorEnd = errorStart + error.length;
+                    if (errorStart >= 0 && errorEnd <= contextText.length) { // Basic sanity check
+                        displayContextHTML = `"...${contextText.substring(0, errorStart)}` +
+                            `<span class="error-context-highlight">` +
+                            `${contextText.substring(errorStart, errorEnd)}` +
+                            `</span>` +
+                            `${contextText.substring(errorEnd)}..."`;
+                    }
+                }
+
 
                 let suggestionsHTML = '';
                 if (error.suggestions && error.suggestions.length > 0) {
                     suggestionsHTML = `<p class="text-sm text-green-700 mt-1">Suggestions: ${error.suggestions.join(', ')}</p>`;
                 }
 
+                // You might want to display other fields like error.tool and error.type here too
+                let toolInfoHTML = '';
+                if (error.tool) {
+                    toolInfoHTML = `<p class="text-xs text-gray-400">Detected by: ${error.tool} ${error.type ? '('+error.type+')' : ''}</p>`;
+                }
+
                 listItem.innerHTML = `
                     <p class="font-medium text-red-600">${error.message}</p>
-                    <p class="text-sm text-gray-500 my-1">In context: <span class="italic">"...${highlightedContext}..."</span></p>
+                    <p class="text-sm text-gray-500 my-1">In context: <span class="italic">${displayContextHTML}</span></p>
                     ${suggestionsHTML}
+                    ${toolInfoHTML}
                 `;
                 resultsList.appendChild(listItem);
-            });
-        }
+    });
+}
     </script>
 </body>
 </html>

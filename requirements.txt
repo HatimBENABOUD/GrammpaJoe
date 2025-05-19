@@ -1,5 +1,4 @@
 Flask
-language-tool-python
 pyspellchecker
 autocorrect
 textblob

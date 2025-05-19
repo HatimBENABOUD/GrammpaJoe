@@ -1,9 +1,10 @@
 from flask import Flask, request, jsonify, render_template
 import logging
-import language_tool_python
-from spellchecker import SpellChecker as PySpellChecker # Renamed to avoid conflict
 from autocorrect import Speller as AutoCorrectSpeller
 from textblob import TextBlob
+import nltk
+
+nltk.download('punkt_tab')
 # import gramformer # Gramformer can be heavy, ensure it's installed and models are available
 
 # --- Configuration ---

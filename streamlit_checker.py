@@ -102,8 +102,9 @@ def check_spelling(tokens, vocabulary, sym_spell_tool):
             if token not in vocabulary:
                 candidates = []
                 if sym_spell_tool:
+                    # Corrected: Changed max_edit_distance_lookup to max_edit_distance
                     suggestions = sym_spell_tool.lookup(token, Verbosity.CLOSEST,
-                                                        max_edit_distance_lookup=2)
+                                                        max_edit_distance=2) # Look for candidates within edit distance 2
                     candidates = [s.term for s in suggestions]
                 # No fallback to slow Levenshtein here in Streamlit for performance
                 # If SymSpell is None, spell checking is effectively disabled

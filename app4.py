@@ -108,12 +108,8 @@ def check_spelling(tokens, vocabulary, sym_spell_tool):
                 if sym_spell_tool:
                     # Use SymSpell to find suggestions
                     # max_edit_distance_lookup: maximum edit distance for lookups
-                    suggestions = sym_spell_tool.lookup(token, Verbosity.CLOSEST,
-                                                        max_edit_distance_lookup=2) # Look for candidates within edit distance 2
+                    suggestions = sym_spell_tool.lookup(token, Verbosity.CLOSEST, 2) # Look for candidates within edit distance 2
                     candidates = [s.term for s in suggestions]
-                else:
-                    # Fallback to slow Levenshtein distance if SymSpell failed to initialize
-                    candidates = generate_spell_candidates(token, vocabulary, max_distance=1)
 
 
                 # Find the offset of the token in the reconstructed text

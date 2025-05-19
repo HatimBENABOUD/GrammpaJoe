@@ -2,10 +2,6 @@ from flask import Flask, request, jsonify, render_template
 import re
 import nltk
 from nltk.corpus import words
-import time # Import time to measure performance
-
-# Import SymSpell
-from symspellpy import SymSpell, Verbosity
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -18,43 +14,23 @@ except LookupError:
     print("NLTK 'words' corpus not found. Downloading...")
     nltk.download('words')
 
-# --- Vocabulary (using NLTK's words corpus) and SymSpell Setup ---
+
+# --- Vocabulary (using NLTK's words corpus) ---
 # If one library is allowed, NLTK's words corpus is a good source.
 # Otherwise, you'd need a simple text file containing a dictionary.
-
-# Initialize SymSpell
-# max_dictionary_edit_distance: maximum edit distance for dictionary precomputation
-# prefix_length: prefix length for deletes
-sym_spell = SymSpell(max_dictionary_edit_distance=2, prefix_length=7)
-
 try:
-    # Load the NLTK words corpus
-    nltk_words = words.words()
-    print(f"NLTK 'words' corpus loaded. Size: {len(nltk_words)}")
-
-    # Build the SymSpell dictionary from the NLTK words
-    # This step takes some time initially but makes lookups much faster
-    start_time = time.time()
-    for word in nltk_words:
-        # Add word and its frequency (frequency 1 is fine for just a word list)
-        sym_spell.create_dictionary_entry(word, 1)
-    end_time = time.time()
-    print(f"SymSpell dictionary built in {end_time - start_time:.2f} seconds.")
-
-    # Keep the NLTK vocabulary set for the grammar checker's basic lookup
-    VOCABULARY = set(nltk_words)
-
+    VOCABULARY = set(words.words())
+    print("NLTK 'words' corpus loaded successfully.")
 except Exception as e:
-    print(f"Error loading NLTK 'words' corpus or building SymSpell dictionary: {e}")
-    print("Falling back to a small hardcoded vocabulary and no SymSpell.")
-    # Fallback to a small hardcoded list if NLTK corpus or SymSpell build fails
+    print(f"Error loading NLTK 'words' corpus: {e}")
+    print("Falling back to a small hardcoded vocabulary.")
+    # Fallback to a small hardcoded list if NLTK corpus fails
     VOCABULARY = set([
         "the", "cat", "sat", "on", "mat", "a", "is", "in", "it", "and",
         "dog", "run", "runs", "jump", "jumps", "big", "small", "quick",
         "brown", "fox", "lazy", "dogs", "time", "of", "for", "to", "be",
         "have", "has", "do", "does", "go", "goes", "went", "gone"
     ])
-    sym_spell = None # Disable SymSpell if setup failed
 
 
 # --- 1. Introduction to NLP and Text Preprocessing ---
@@ -83,44 +59,65 @@ def simple_tokenize_normalize(text):
 
     return cleaned_tokens
 
-# --- Spell Checking Logic (Now using SymSpell) ---
+# --- Spell Checking Logic ---
 
-# We keep the Levenshtein distance function as it's a core concept,
-# but SymSpell uses an optimized approach internally for candidate generation.
-# The generate_spell_candidates function is replaced by SymSpell's lookup.
-
-def check_spelling(tokens, vocabulary, sym_spell_tool):
+def levenshtein_distance(s1, s2):
     """
-    Checks spelling of tokens against the vocabulary, using SymSpell for suggestions.
+    Calculate the Levenshtein distance between two words.
+    This is a common technique for measuring string similarity.
+    """
+    if len(s1) > len(s2):
+        s1, s2 = s2, s1
+
+    distances = range(len(s1) + 1)
+    for i2, c2 in enumerate(s2):
+        new_distances = [i2 + 1]
+        for i1, c1 in enumerate(s1):
+            if c1 == c2:
+                new_distance = distances[i1]
+            else:
+                new_distance = 1 + min((distances[i1], distances[i1 + 1], new_distances[-1]))
+            new_distances.append(new_distance)
+        distances = new_distances
+    return distances[-1]
+
+def generate_spell_candidates(word, vocabulary, max_distance=1):
+    """
+    Generate potential spelling corrections for a word
+    using Levenshtein distance.
+    """
+    candidates = []
+    # For larger vocabularies, this can be slow. Optimizations exist (e.g., using a Trie).
+    for vocab_word in vocabulary:
+        if levenshtein_distance(word, vocab_word) <= max_distance:
+            candidates.append(vocab_word)
+    # Simple ranking: sort by distance (closer is better), then alphabetically
+    candidates.sort(key=lambda x: (levenshtein_distance(word, x), x))
+    return candidates
+
+def check_spelling(tokens, vocabulary):
+    """
+    Checks spelling of tokens against the vocabulary.
     Returns a list of potential spelling errors and suggestions.
     """
     errors = []
+    # Keep track of the original text to provide context and offsets
     original_text = " ".join(tokens) # Reconstruct a rough original text for context
 
     current_offset = 0
     for i, token in enumerate(tokens):
         # Only check words, not punctuation
         if re.fullmatch(r'\w+', token):
-            # Check if the word is in our vocabulary (either NLTK or fallback)
             if token not in vocabulary:
-
-                candidates = []
-                if sym_spell_tool:
-                    # Use SymSpell to find suggestions
-                    # max_edit_distance_lookup: maximum edit distance for lookups
-                    suggestions = sym_spell_tool.lookup(token, Verbosity.CLOSEST,
-                                                        max_edit_distance_lookup=2) # Look for candidates within edit distance 2
-                    candidates = [s.term for s in suggestions]
-                else:
-                    # Fallback to slow Levenshtein distance if SymSpell failed to initialize
-                    candidates = generate_spell_candidates(token, vocabulary, max_distance=1)
-
+                candidates = generate_spell_candidates(token, vocabulary)
 
                 # Find the offset of the token in the reconstructed text
                 try:
+                    # Find the first occurrence of the token starting from the current offset
                     offset_in_text = original_text.index(token, current_offset)
                 except ValueError:
-                    offset_in_text = current_offset # Fallback
+                    # Fallback if index fails (shouldn't happen with simple tokens)
+                    offset_in_text = current_offset
 
                 # Define context window (e.g., 20 characters before and after)
                 context_start = max(0, offset_in_text - 20)
@@ -132,7 +129,7 @@ def check_spelling(tokens, vocabulary, sym_spell_tool):
 
 
                 errors.append({
-                    'tool': 'Basic Spell Checker' if not sym_spell_tool else 'SymSpell Spell Checker', # Indicate which tool was used
+                    'tool': 'Basic Spell Checker', # Identify the tool
                     'type': 'Spelling',
                     'token': token,
                     'index': i, # Index in the token list
@@ -155,8 +152,11 @@ def check_spelling(tokens, vocabulary, sym_spell_tool):
 # --- 3. Modern Language Models (Simplified N-grams idea) ---
 # --- 5. Named Entity Recognition (Very Basic Handling) ---
 
-# This part remains the same as it focuses on basic grammar rules
-# and does not involve the slow Levenshtein distance calculation over the full vocabulary.
+# This is a very simplified rule-based grammar checker.
+# It looks for specific patterns of tokens that are often incorrect.
+# A real grammar checker would involve POS tagging and parsing.
+# We'll also add a very basic check for capitalized words that aren't at the start
+# of a sentence as a rudimentary NER-like check to avoid flagging proper nouns.
 
 def check_grammar(tokens):
     """
@@ -193,7 +193,6 @@ def check_grammar(tokens):
         if token == 'a' and i + 1 < len(tokens):
             next_token = tokens[i+1]
             # This is a very simple check; doesn't handle irregular plurals or exceptions
-            # We still use the VOCABULARY set here for the grammar rule check
             if next_token.endswith('s') and next_token not in VOCABULARY: # Check if it looks like a plural
                  # Context for grammar errors might involve multiple tokens
                  involved_tokens_str = f"{token} {next_token}"
@@ -291,22 +290,21 @@ def check_text_logic(text):
     Runs the basic grammar and spell checker on the input text.
     This function contains the core NLP logic.
     """
-    start_time = time.time() # Start timing
-
     # Simple tokenization and normalization
+    # Note: For accurate context and offsets, we should ideally work with the original text
+    # and map token indices back. This simple implementation reconstructs text which might
+    # slightly affect offsets with complex punctuation/spacing.
     tokens = simple_tokenize_normalize(text)
     # print(f"Tokens: {tokens}") # For debugging
 
     # Perform checks
-    spelling_errors = check_spelling(tokens, VOCABULARY, sym_spell) # Pass sym_spell tool
+    spelling_errors = check_spelling(tokens, VOCABULARY)
     grammar_errors = check_grammar(tokens)
 
     # Combine and sort errors by their position in the original text (approximated)
     # Sorting by the index of the first token involved in the error
     all_errors = sorted(spelling_errors + grammar_errors, key=lambda x: x.get('index', x.get('indices', [float('inf')])[0]))
 
-    end_time = time.time() # End timing
-    print(f"Text checking completed in {end_time - start_time:.4f} seconds.") # Print elapsed time
 
     return all_errors
 

@@ -10,12 +10,9 @@ app = Flask(__name__)
 # This should ideally be done once when setting up the environment
 try:
     nltk.data.find('corpora/words')
-except nltk.downloader.DownloadError:
+except LookupError:
     print("NLTK 'words' corpus not found. Downloading...")
     nltk.download('words')
-except LookupError:
-     print("NLTK 'words' corpus not found. Downloading...")
-     nltk.download('words')
 
 
 # --- Vocabulary (using NLTK's words corpus) ---

@@ -15,22 +15,6 @@ logging.basicConfig(level=logging.INFO) # Set to DEBUG for more details
 app = Flask(__name__)
 
 # --- Initialize NLP Tools ---
-# language_tool_python
-lt_tool = None
-try:
-    lt_tool = language_tool_python.LanguageTool('en-US')
-    logging.info("LanguageTool initialized successfully.")
-except Exception as e:
-    logging.error(f"Error initializing LanguageTool: {e}")
-    logging.error("Please ensure Java is installed and accessible for LanguageTool.")
-
-# pyspellchecker
-try:
-    pyspell_checker = PySpellChecker()
-    logging.info("PySpellChecker initialized successfully.")
-except Exception as e:
-    pyspell_checker = None
-    logging.error(f"Error initializing PySpellChecker: {e}")
 
 # autocorrect
 try:
@@ -62,50 +46,6 @@ gf_tool = None
 #     gf_tool = None
 
 # --- Helper Functions for Text Checking ---
-
-def check_with_language_tool(text):
-    """Checks text using language_tool_python."""
-    if not lt_tool:
-        return []
-    matches = lt_tool.check(text)
-    errors = []
-    for match in matches:
-        errors.append({
-            'tool': 'LanguageTool',
-            'type': match.category,
-            'message': match.message,
-            'context': match.context,
-            'offset': match.offset,
-            'length': match.errorLength,
-            'suggestions': match.replacements[:5]
-        })
-    return errors
-
-def check_with_pyspellchecker(text):
-    """Checks text using pyspellchecker."""
-    if not pyspell_checker:
-        return []
-    words = text.split() # Simple split, can be improved with regex for punctuation
-    misspelled = pyspell_checker.unknown(words)
-    errors = []
-    for word in misspelled:
-        # Find word occurrences to provide context
-        offset = 0
-        while True:
-            idx = text.find(word, offset)
-            if idx == -1:
-                break
-            errors.append({
-                'tool': 'PySpellChecker',
-                'type': 'Spelling',
-                'message': f"Possible spelling mistake: '{word}'",
-                'context': text[max(0, idx-20):min(len(text), idx+len(word)+20)], # Provide some context
-                'offset': idx,
-                'length': len(word),
-                'suggestions': list(pyspell_checker.candidates(word))[:5]
-            })
-            offset = idx + 1 # Move past this instance
-    return errors
 
 def check_with_autocorrect(text):
     """Checks text using autocorrect."""
@@ -291,19 +231,8 @@ def check_text_route(): # Renamed to avoid conflict with function name
 
     all_errors = []
 
-    # LanguageTool
-    if lt_tool:
-        logging.info("Checking with LanguageTool...")
-        all_errors.extend(check_with_language_tool(text_to_check))
-    else:
-        logging.warning("LanguageTool not available for checking.")
+   
 
-    # PySpellChecker
-    if pyspell_checker:
-        logging.info("Checking with PySpellChecker...")
-        all_errors.extend(check_with_pyspellchecker(text_to_check))
-    else:
-        logging.warning("PySpellChecker not available for checking.")
 
     # Autocorrect
     if autocorrect_speller:
@@ -325,7 +254,7 @@ def check_text_route(): # Renamed to avoid conflict with function name
         logging.info("Gramformer check skipped (tool not initialized or available).")
 
 
-    if not all_errors and not lt_tool and not pyspell_checker and not autocorrect_speller:
+    if not all_errors and not autocorrect_speller:
          return jsonify({"error": "No text checking tools are available or initialized. Check server logs."}), 500
 
 

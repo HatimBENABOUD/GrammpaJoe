@@ -2,48 +2,47 @@ import streamlit as st
 import re
 import nltk
 from nltk.corpus import words
-import time
 from symspellpy import SymSpell, Verbosity
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+import torch
 
 @st.cache_resource
 def load_nltk_words():
     try:
         nltk.data.find('corpora/words')
     except LookupError:
-        st.info("Downloading NLTK 'words' corpus...")
+        st.info("NLTK 'words' corpus not found. Downloading...")
         nltk.download('words')
     base_vocab = set(words.words())
     custom_words = {"using", "streamlit", "python", "checking", "grammar", "spelling"}
     return base_vocab.union(custom_words)
 
-
 @st.cache_resource
 def build_symspell_dictionary(vocabulary):
     sym_spell = SymSpell(max_dictionary_edit_distance=2, prefix_length=7)
-    start_time = time.time()
     for word in vocabulary:
         sym_spell.create_dictionary_entry(word, 1)
-    end_time = time.time()
-    st.success(f"SymSpell dictionary built in {end_time - start_time:.2f} seconds.")
     return sym_spell
 
+@st.cache_resource
+def load_bert_model():
+    tokenizer = AutoTokenizer.from_pretrained("vennify/t5-base-grammar-correction")
+    model = AutoModelForSeq2SeqLM.from_pretrained("vennify/t5-base-grammar-correction")
+    return tokenizer, model
+
 VOCABULARY = load_nltk_words()
-if VOCABULARY:
-    SYM_SPELL = build_symspell_dictionary(VOCABULARY)
-else:
-    VOCABULARY = {"the", "cat", "sat", "on", "mat", "a", "is", "in", "it", "and", "dog", "run", "runs", "jump", "jumps", "big", "small", "quick", "brown", "fox", "lazy", "dogs", "time", "of", "for", "to", "be", "have", "has", "do", "does", "go", "goes", "went", "gone"}
-    SYM_SPELL = None
-    st.warning("Falling back to a small hardcoded vocabulary and no SymSpell.")
+SYM_SPELL = build_symspell_dictionary(VOCABULARY)
+BERT_TOKENIZER, BERT_MODEL = load_bert_model()
 
 def simple_tokenize_normalize(text):
     text = text.lower()
-    tokens = re.findall(r'\b\w+\b|[.,!?;:\"\'()]+', text)
+    tokens = re.findall(r"\b\w+\b|[.,!?;:\"'()]+", text)
     cleaned_tokens = []
     for token in tokens:
-        clean_word = re.sub(r'[.,!?;:\"\'()]+$', '', token)
+        clean_word = re.sub(r"[.,!?;:\"'()]+$", "", token)
         if clean_word:
             cleaned_tokens.append(clean_word)
-        punctuation = re.findall(r'[.,!?;:\"\'()]+', token)
+        punctuation = re.findall(r"[.,!?;:\"'()]+", token)
         if punctuation:
             cleaned_tokens.extend(punctuation)
     return cleaned_tokens
@@ -136,27 +135,34 @@ def check_grammar(tokens):
         current_offset = offset_in_text + len(token) + 1
     return errors
 
+def deep_learning_correction(text):
+    input_text = "gec: " + text
+    input_ids = BERT_TOKENIZER.encode(input_text, return_tensors="pt", max_length=512, truncation=True)
+    with torch.no_grad():
+        outputs = BERT_MODEL.generate(input_ids, max_length=512)
+    corrected_text = BERT_TOKENIZER.decode(outputs[0], skip_special_tokens=True)
+    return corrected_text
+
 def check_text_logic(text, vocabulary, sym_spell_tool):
-    start_time = time.time()
     tokens = simple_tokenize_normalize(text)
     spelling_errors = check_spelling(tokens, vocabulary, sym_spell_tool)
     grammar_errors = check_grammar(tokens)
     all_errors = sorted(spelling_errors + grammar_errors, key=lambda x: x.get('index', 0))
-    end_time = time.time()
-    st.sidebar.write(f"Processed in {end_time - start_time:.2f} seconds")
-    return all_errors
+    corrected = deep_learning_correction(text)
+    return all_errors, corrected
 
-st.title("📝 Grammar & Spell Checker")
+st.title("🧠 AI Grammar & Spell Checker (Real-Time)")
 st.markdown("""
-Enter text to detect common grammar and spelling issues. 
-**New features:** Preposition usage check and improved highlights.
+Type your text to get:
+- Spelling and grammar issues (rule-based)
+- AI-based sentence correction (powered by BERT)
 """)
 
-text_input = st.text_area("Enter your text:", height=200)
+text_input = st.text_area("Start typing:", height=200, key="realtime_input")
 
 if text_input:
-    issues = check_text_logic(text_input, VOCABULARY, SYM_SPELL)
-    st.subheader("Results")
+    issues, ai_suggestion = check_text_logic(text_input, VOCABULARY, SYM_SPELL)
+    st.subheader("Live Feedback")
     if issues:
         for issue in issues:
             st.markdown(f"**Type:** {issue['type']}")
@@ -170,3 +176,6 @@ if text_input:
             st.markdown("---")
     else:
         st.success("No issues found!")
+
+    st.subheader("✨ AI Suggestion")
+    st.markdown(f"**Corrected Sentence:** {ai_suggestion}")

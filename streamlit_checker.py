@@ -136,7 +136,7 @@ def check_grammar(tokens):
     return errors
 
 def deep_learning_correction(text):
-    input_text = "gec: " + text
+    input_text = "gec: " + text # Grammar Error Correction
     input_ids = BERT_TOKENIZER.encode(input_text, return_tensors="pt", max_length=512, truncation=True)
     with torch.no_grad():
         outputs = BERT_MODEL.generate(input_ids, max_length=512)

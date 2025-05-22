@@ -136,7 +136,7 @@ def check_grammar(tokens):
     return errors
 
 def deep_learning_correction(text):
-    input_text = "gec: " + text # Grammar Error Correction
+    input_text = "gec: " + text 
     input_ids = BERT_TOKENIZER.encode(input_text, return_tensors="pt", max_length=512, truncation=True)
     with torch.no_grad():
         outputs = BERT_MODEL.generate(input_ids, max_length=512)
@@ -168,7 +168,7 @@ if text_input:
             st.markdown(f"**Type:** {issue['type']}")
             st.markdown(f"**Message:** {issue['message']}")
             highlighted = issue['context'][:issue['offsetInContext']] + \
-                f"<span style='background-color:#fffb91;padding:0 4px;border-radius:4px'><b>{issue['context'][issue['offsetInContext']:issue['offsetInContext']+issue['length']]}</b></span>" + \
+                f"<span style='background-color:#de4141;padding:0 4px;border-radius:4px'><b>{issue['context'][issue['offsetInContext']:issue['offsetInContext']+issue['length']]}</b></span>" + \
                 issue['context'][issue['offsetInContext']+issue['length']:]
             st.markdown(f"**In context:**<br>...{highlighted}...", unsafe_allow_html=True)
             if issue.get('suggestions'):
